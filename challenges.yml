@@ -1,0 +1,274 @@
+many-to-one_2:
+    question: |
+        Suppose you have a `Product` entity and each `Product` should be related to
+        a single `Category` entity. What property should you add to `Product` to
+        add this? And what would the corresponding column in the database be called?
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    `category` property and `category` column
+                b: |
+                    `categoryId` property and `category_id` column
+                c: |
+                    `category` property and `category_id` column
+            correct: c
+
+saving-relations_2:
+    question: |
+        I'm trying to relate a `Product` object to a `Category`... but it's
+        not working. What's wrong with my code?
+
+        ```php
+        $category = new Category();
+        // ...
+
+        $product->setCategory($category->getId());
+
+        $entityManager->persist($product);
+        $entityManager->persist($category);
+
+        $entityManager->flush();
+        ```
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    The `$category` needs to be persisted first so that its id is available to be set onto `$product`.
+                b: |
+                    `$product->setCategory($category->getId());` needs to be called *after* the `$category` has been saved to the database.
+                c: |
+                    `$product->setCategory()` should be passed a `Category` object, not the id.
+            correct: c
+
+fetching-relations_6:
+    question: |
+        I'm doing some debugging and have the following code:
+
+        ```php
+        public function somePage($id)
+        {
+            $question = $questionRepository->find($id);
+            $answers = $question->getAnswers();
+
+            dd($answers);
+        }
+        ```
+
+        When the `dd()` is executed, how many queries have been executed?
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    2 queries: one to query for the Question and one to query for the related answers.
+                b: |
+                    1 query: the initial query grabs all the Question data and related Answer data via a JOIN automatically.
+                c: |
+                    1 query: the initial query grabs the Question data. No Answer data has been queried yet.
+                d: |
+                    0 queries: our site works by *pure* magic: no queries needed to fetch data!!!
+            correct: c
+
+owning-vs-inverse_8:
+    question: |
+        I have a `ManyToOne` relationship between `Product` and `Category`. What is *not* true about that relationship?
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    This same relationship can be viewed as a `OneToMany` from `Category` to `Product`.
+                b: |
+                    Mapping the `ManyToOne` relationship is required, but mapping the `OneToMany` is optional.
+                c: |
+                    If you set the inverse site of the relationship (e.g. `$category->addProduct($product)`),
+                    it will *not* save, unless you have some "smart" code inside your `addProduct()`
+                    method that also sets the owning side.
+                d: |
+                    All of these statements are true.
+            correct: d
+
+collection-criteria_11:
+    question: |
+        I can already call `$category->getProducts()` to get a collection of *all* of the products
+        for a specific `Category`. But now, I want an easy way to be able to get that same collection,
+        but filtered by newest first *and* where a product's price is greater than $100. Is that possible?
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    Yes: use `ORM\OrderBy` and `ORM\WhereBy` above the `$products` propert inside `Category`.
+                b: |
+                    Yes: add a new `getExpensiveProducts()` method and use the Criteria system.
+                c: |
+                    Yes: add a new `getExpensiveProducts()` method and leverage the `->filter()` method on the `$this->products` property.
+                d: |
+                    No: it's not possible because you need a service to do this. And so, this logic can't live in your entity class.
+            correct: b
+
+join-n-plus-one_14:
+    question: |
+        Imagine we have the following code in a Twig template:
+
+        ```twig
+        {% for product in category.products %}
+            {{ product.name }}
+        {% endfor %}
+        ```
+
+        To fetch the `Category` object, in the controller, we call this method on `CategoryRepository`:
+
+        ```php
+        public function findMostPopular(): array
+        {
+           return $this->createQueryBuilder('answer')
+               ->orderBy('product.price', 'DESC')
+               ->getQuery()
+               ->getResult();
+           }
+        }
+        ```
+
+        But when I load the page... I have 11 queries just to render 10 products! Yikes! To try to fix this, I
+        made this change:
+
+        ```diff
+        public function findMostPopular(): array
+        {
+           return $this->createQueryBuilder('product')
+               ->orderBy('product.price', 'DESC')
+        +       ->innerJoin('product.category', 'category')
+        +       ->addSelect('category')
+               ->getQuery()
+               ->getResult();
+           }
+        }
+        ```
+
+        Will this reduce my quries? And, do I need to tweak any other parts of my code?
+    explanation: |
+        the takeaway here is that the same exact data is returned... but we're selecting more data in our query
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    Yes: this will reduce the queries and no other changes are needed.
+                b: |
+                    Yes: this will reduce the queries. But because we're now *also* selecting the `category` data,
+                    you'll need to update the template to account for this.
+                c: |
+                    No: this will not reduce the queries because `leftJoin()` is needed instead of `innerJoin()`.
+            correct: a
+
+search-form_15:
+    question: |
+        On the "Category" page, I've added a search box that will allow my users to search for
+        products that are in that category. Here's the query I built for this in `ProductRepository`:
+
+        ```php
+        public function searchCategory(Category $category, string $search): array
+        {
+            return $this->createQueryBuilder('product')
+                ->andWhere('product.category = :category')
+                ->andWhere('product.name LIKE :term')
+                ->orWhere('product.description LIKE :term')
+                ->setParameter('category', $category)
+                ->setParameter('term', '%'.$search.'%')
+                ->getQuery()
+                ->getResult();
+        }
+        ```
+
+        Is this correct?
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    Yes! This combines a fuzzy search on two categories AND filters to a specific category.
+                b: |
+                    No: You can't put `%` around a paramter: this needs to be added into the WHERE clause.
+                c: |
+                    No: This will match the description of *any* product in *any* category.
+            correct: c
+
+many-to-many_17:
+    question: |
+        I've just used `make:entity` to build a ManyToMany relationship between `Product` and
+        `Distributor`. How will this look in the database?
+    explanation: |
+
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    The `product` table will have a `distributor_id` column and the `distributor` table will have a `product_id` column.
+                b: |
+                    A new `product_distributor` table will be created in the database... even though there is no `ProductDistributor` entity.
+                c: |
+                    The `product` table will have a `distributors` foreign key array column.
+            correct: b
+
+many-to-many-saving_18:
+    question: |
+        I have a `Product` entity that is a ManyToMany to `Distributor`. Imagine that
+        the `$distributor`, `$product1` and `$product2` objects have already been
+        saved to the database:
+
+        ```php
+        $distributor->addProduct($product1);
+        $entityManager->flush();
+
+        $distributor->addProduct($product1);
+        $distributor->addProduct($product2);
+        $entityManager->flush();
+
+        $distributor->removeProduct($product1);
+        $entityManager->flush();
+        ```
+
+        After running this code, how many rows are in the `product_distributor` table?
+    explanation: |
+        If you set a redundant item on a relationship - like add `$product1` even though it's already added,
+        you don't get an error and it doesn't add a 2nd row: it just ignores it
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    2: One for the remaining `$product1` and one for `$product2`
+                b: |
+                    1: Just `$product2`
+                c: |
+                    Trick question! An exception will be thrown when adding `$product1` a second time!
+            correct: b
+
+broken-migration_22:
+    question: |
+        Image you run a migration with 5 queries in it... and it fails on the 2nd query! What do we do???
+    explanation: |
+        the big takeway here is that if you're using Pgsql, then answer A is correct.... but MySQL is silly... and so you have to do a bunch of work
+    features:
+        multiple_choice:
+            choices:
+                a: |
+                    Just fix the migration and run it again. All modern database systems are able to "roll back"
+                    the 1st query to reset the system.
+                b: |
+                    Just fix the migration and run it again. The migrations system keeps track of exactly
+                    which queries have and haven't been executed. When you re-run the migration later,
+                    it'll skip the query.
+                c: |
+                    After fixing the migration, the only safe thing to do is completely reset your database
+                    to the structure (and data) it had before you ran the migration. Then you can run the migration
+                    to validate that it works.
+            correct: a
