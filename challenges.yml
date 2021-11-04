@@ -1,10 +1,15 @@
 many-to-one_2:
     question: |
         Suppose you have a `Product` entity and each `Product` should be related to
-        a single `Category` entity. What property should you add to `Product` to
-        add this? And what would the corresponding column in the database be called?
+        a single `Category`. What property should you add to `Product` to
+        accomplish this? And what would the corresponding column in the database be called?
     explanation: |
+        In PHP land, we get to *entirely* ignore the database and just think about objects.
+        Since the `Product` object should have a related `Category` object, it makes sense
+        to call that property `category`.
 
+        What the column is called in the database doesn't really matter. But by default,
+        Doctrine will call it `category_id`, and it will hold the related "id" value.
     features:
         multiple_choice:
             choices:
@@ -33,21 +38,28 @@ saving-relations_2:
         $entityManager->flush();
         ```
     explanation: |
+        One *great* thing about Doctrine relations is that it does *not* matter which order you
+        save the objects. All we need to do is `persist()` the objects (in any order) and then
+        call `flush()`. Doctrine is smart enough to figure out that it needs to INSERT the
+        `Category` first (so that it has an id) and *then* use that `id` to save the `Product`.
 
+        And, once again, in PHP, we almost get to ignore the database entirely. So when we relate
+        two objects - like `Category` and `Product` - we relate them by setting *objects* onto
+        the properties, not ids.
     features:
         multiple_choice:
             choices:
                 a: |
                     The `$category` needs to be persisted first so that its id is available to be set onto `$product`.
                 b: |
-                    `$product->setCategory($category->getId());` needs to be called *after* the `$category` has been saved to the database.
-                c: |
                     `$product->setCategory()` should be passed a `Category` object, not the id.
-            correct: c
+                c: |
+                    `$product->setCategory($category->getId());` needs to be called *after* the `$category` has been saved to the database.
+            correct: b
 
 fetching-relations_6:
     question: |
-        I'm doing some debugging and have the following code:
+        I'm doing some debugging and I have the following code:
 
         ```php
         public function somePage($id)
@@ -59,27 +71,41 @@ fetching-relations_6:
         }
         ```
 
-        When the `dd()` is executed, how many queries have been executed?
+        When the `dd()` is hit, how many queries have been executed?
     explanation: |
+        The first query is pretty obvious: `$questionRepository->find($id)` fetches the data for that
+        *one* specific question. But, unless you're using `fetch="EAGER"` (not a feature we talk about
+        in the tutorial), this will *only* fetch for the question data: it will not *also* query for the
+        related answers.
 
+        Then, it *might* seem that calling `$question->getAnswers()` would make a second query, but it does
+        *not*. Doctrine is smart: it won't make that query until you try to *use* this property - e.g.
+        `count($answers)` or looping over `$answers`.
     features:
         multiple_choice:
             choices:
                 a: |
-                    2 queries: one to query for the Question and one to query for the related answers.
+                    2 queries: one to query for the `Question` and one to query for the related answers.
                 b: |
-                    1 query: the initial query grabs all the Question data and related Answer data via a JOIN automatically.
+                    1 query: the initial query grabs all the `Question` data and related `Answer` data via an implicit JOIN.
                 c: |
-                    1 query: the initial query grabs the Question data. No Answer data has been queried yet.
+                    1 query: the initial query grabs the `Question` data. No `Answer` data has been queried yet.
                 d: |
-                    0 queries: our site works by *pure* magic: no queries needed to fetch data!!!
+                    0 queries: our site works by *pure* magic: no queries needed to fetch data!!! Web scale!
             correct: c
 
 owning-vs-inverse_8:
     question: |
         I have a `ManyToOne` relationship between `Product` and `Category`. What is *not* true about that relationship?
     explanation: |
+        Yes, yes and yes! `ManyToOne` === `OneToMany`... just seen in the other direction. And because `ManyToOne`
+        is the "owning" side, it is *required*... while you could choose to *not* add the `OneToMany` side (it
+        would simply mean that you don't have the `$category->getProducts()` convenience method).
 
+        Finally, if you set data on the *inverse* side of a relationship (on the `$products` property inside `Category`
+        in this example) and then save, Doctrine completely ignores that: it only looks at the owning side when
+        saving. But... thanks to smart code that `make:entity` generated, if you set the inverse side, that
+        method (e.g. `addProduct()`) handles setting the "owning" side for you. So... it all just works!
     features:
         multiple_choice:
             choices:
@@ -99,16 +125,22 @@ collection-criteria_11:
     question: |
         I can already call `$category->getProducts()` to get a collection of *all* of the products
         for a specific `Category`. But now, I want an easy way to be able to get that same collection,
-        but filtered by newest first *and* where a product's price is greater than $100. Is that possible?
+        but filtered by newest DESC *and* where a product's price is greater than $100. Is that possible?
     explanation: |
+        The `ORM\OrderBy` can be used to change the sorting of `$category->getProducts()`... but you can't
+        control anything else unless you create a custom method.
 
+        Technically, adding a `getExpensiveProducts()` method that leverage the `->filter()` method *would* work.
+        But unless you will *always* have only a *few* related products, this could hurt performance big time
+        because Doctrine will need to query for *all* of the products... before they can be filtered. Using
+        the `Criteria` system is the best way.
     features:
         multiple_choice:
             choices:
                 a: |
-                    Yes: use `ORM\OrderBy` and `ORM\WhereBy` above the `$products` propert inside `Category`.
+                    Yes: use `ORM\OrderBy` and `ORM\WhereBy` above the `$products` property inside `Category`.
                 b: |
-                    Yes: add a new `getExpensiveProducts()` method and use the Criteria system.
+                    Yes: add a new `getExpensiveProducts()` method and use the `Criteria` system.
                 c: |
                     Yes: add a new `getExpensiveProducts()` method and leverage the `->filter()` method on the `$this->products` property.
                 d: |
@@ -128,13 +160,14 @@ join-n-plus-one_14:
         To fetch the `Category` object, in the controller, we call this method on `CategoryRepository`:
 
         ```php
-        public function findMostPopular(): array
+        public function findBySlug(string $slug): ?Category
         {
-           return $this->createQueryBuilder('answer')
-               ->orderBy('product.price', 'DESC')
-               ->getQuery()
-               ->getResult();
-           }
+            return $this->createQueryBuilder('category')
+                ->andWhere('category.slug = :slug')
+                ->setParameter('slug', $slug);
+                ->getQuery()
+                ->getOneOrNullResult();
+            }
         }
         ```
 
@@ -142,21 +175,28 @@ join-n-plus-one_14:
         made this change:
 
         ```diff
-        public function findMostPopular(): array
+        public function findBySlug(string $slug): ?Category
         {
-           return $this->createQueryBuilder('product')
-               ->orderBy('product.price', 'DESC')
-        +       ->innerJoin('product.category', 'category')
-        +       ->addSelect('category')
+           return $this->createQueryBuilder('category')
+                ->andWhere('category.slug = :slug')
+                ->setParameter('slug', $slug);
+        +       ->leftJoin('category.product', 'product')
+        +       ->addSelect('product')
                ->getQuery()
-               ->getResult();
+               ->getOneOrNullResult();
            }
         }
         ```
 
         Will this reduce my quries? And, do I need to tweak any other parts of my code?
     explanation: |
-        the takeaway here is that the same exact data is returned... but we're selecting more data in our query
+        This is the *perfect* way to solve the N+1 problem. By "joining" to the related table
+        and then selecting its data, you get all the data you need in one query.
+
+        One... kind of "odd" (but awesome) thing is that, when you do this, even though Doctrine
+        is querying for *way* more data, it will *still* return the exact same result as before:
+        a single `Category` object. But, internally, that `Category` will be preloaded
+        with all of its related Products.
     features:
         multiple_choice:
             choices:
@@ -190,6 +230,27 @@ search-form_15:
 
         Is this correct?
     explanation: |
+        In short, never use `orWhere()`! Why? In this situation, the final WHERE clause will look something like this:
+        
+        > WHERE
+        >   category_id = 5
+        >   AND name LIKE '%foo%'
+        >   OR description LIKE '%foo%'
+
+        But what we *need* is:
+
+        > WHERE
+        >   category_id = 5
+        >   AND (name LIKE '%foo%' OR description LIKE '%foo%')
+
+        The missing parentheses will return products in *any* category... as long as their description
+        contains `foo`... which is not what we want.
+
+        In the QueryBuilder, the solution looks like this:
+        
+        ```php
+        ->andWhere('product.name LIKE :term OR product.description LIKE :term')
+        ```
 
     features:
         multiple_choice:
@@ -200,6 +261,8 @@ search-form_15:
                     No: You can't put `%` around a paramter: this needs to be added into the WHERE clause.
                 c: |
                     No: This will match the description of *any* product in *any* category.
+                d: |
+                    No: You need to call `setParameter()` again because you're using `:term` two times.
             correct: c
 
 many-to-many_17:
@@ -207,7 +270,9 @@ many-to-many_17:
         I've just used `make:entity` to build a ManyToMany relationship between `Product` and
         `Distributor`. How will this look in the database?
     explanation: |
-
+        The ManyToMany relationship is special because it is the only time where Doctrine creates and
+        manages a table *for* you (the join table) that is not tied directly to an entity. This is
+        how a ManyToMany relationship is handled in all relational databases.
     features:
         multiple_choice:
             choices:
@@ -239,8 +304,14 @@ many-to-many-saving_18:
 
         After running this code, how many rows are in the `product_distributor` table?
     explanation: |
-        If you set a redundant item on a relationship - like add `$product1` even though it's already added,
-        you don't get an error and it doesn't add a 2nd row: it just ignores it
+        If you set a redundant item on a relationship - like add `$product1` even though it's already added -
+        you won't get an error... but it also won't add a 2nd row. It just ignores it.
+
+        So, the queries for this situation are:
+
+        * `flush()` 1: INSERT a row for $product1
+        * `flush()` 2: INSERT a row for $product2
+        * `flush()` 3: DELETE the row for $product1
     features:
         multiple_choice:
             choices:
@@ -254,9 +325,15 @@ many-to-many-saving_18:
 
 broken-migration_22:
     question: |
-        Image you run a migration with 5 queries in it... and it fails on the 2nd query! What do we do???
+        Imagine you run a migration with 5 queries in it... and it fails on the 2nd query! What do we do???
     explanation: |
-        the big takeway here is that if you're using Pgsql, then answer A is correct.... but MySQL is silly... and so you have to do a bunch of work
+        This is... a bit of a trick question. If you're using PostgreSQL, then answer (a) is correct because
+        PostgreSQL will "roll back" (undo) the changes in the first query. In other words, the end result
+        is that *none* of the migration was executed. And so, you can fix it and retry it.
+
+        But... if you're using MySQL... it's a bit silly and does *not* support "rollback" on things like
+        `ALTER TABLE` statements. This leaves your migration in a "partially-run-half-dead-zombie" state.
+        And so you need to reset things to properly test.
     features:
         multiple_choice:
             choices:
@@ -271,4 +348,4 @@ broken-migration_22:
                     After fixing the migration, the only safe thing to do is completely reset your database
                     to the structure (and data) it had before you ran the migration. Then you can run the migration
                     to validate that it works.
-            correct: a
+            correct: c
